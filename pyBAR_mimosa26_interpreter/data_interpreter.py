@@ -1,11 +1,33 @@
 ''' Class to convert Mimosa 26 raw data recorded with pyBAR to hit maps.
 '''
-
+import os
 from numba import njit
 import numpy as np
+import tables as tb
+import logging
+import progressbar
+from matplotlib.backends.backend_pdf import PdfPages
 
 
-hit_dtype = [('event_number', '<i8'), ('plane', '<u2'), ('frame', '<u4'), ('column', '<u2'), ('row', '<u4'), ('trigger_status', '<u1'), ('event_status', '<u2')]
+hit_dtype = np.dtype([('event_number', '<i8'), ('trigger_number', '<u4'), ('plane', '<u2'), ('frame', '<u4'), ('column', '<u2'), ('row', '<u4'), ('trigger_status', '<u1'), ('event_status', '<u2')])
+
+
+# Event error codes
+NO_ERROR = 0  # No error
+MULTIPLE_TRG_WORD = 1  # Event has more than one trigger word
+NO_TRG_WORD = 2  # Event has no trigger word
+DATA_ERROR = 4  # Event has data word combinations that do not make sense (tailor at wrong position, not increasing frame counter ...)
+EVENT_INCOMPLETE = 8  # Data words are missing (e.g. tailor header)
+UNKNOWN_WORD = 16  # Event has unknown words
+UNEVEN_EVENT = 32  # Event has uneven amount of data words
+TRG_ERROR = 64  # A trigger error occured
+TRUNC_EVENT = 128  # Event had to many hits and was truncated
+TDC_WORD = 256  # Event has a TDC word
+MANY_TDC_WORDS = 512  # Event has more than one valid TDC word
+TDC_OVERFLOW = 1024  # Event has TDC word indicating a TDC overflow
+NO_HIT = 2048  # vents without any hit, usefull for trigger number debugging
+
+
 
 
 def m26_decode_orig(raw, fout, start=0, end=-1):
@@ -176,23 +198,54 @@ def get_n_words(word):  # Return the number of data words for the actual row
 def get_n_hits(word):  # Returns the number of hits given by actual column word
     return word & 0x3
 
+@njit
+def has_overflow(word):
+    return word & 0x00008000 != 0
 
-def m26_decode(raw_data):
+@njit
+def is_trigger_word(word):
+    return 0x80000000 & word == 0x80000000
+
+@njit
+def get_trigger_number(word):  # Returns the number of hits given by actual column word
+    return word & 0xFFFF
+
+@njit
+def add_event_status(plane_id, event_status, status_code):
+    #print 'ADD EVENT STATUS', status_code
+    event_status[plane_id] |= status_code
+
+@njit
+def finish_event(plane_id, hits_buffer, hit_buffer_index, event_status, hits, hit_index):
+    #print 'FINISH EVENT', hit_buffer_index
+    for i_hit in range(hit_buffer_index):  # Loop over buffered hits
+        hits[hit_index] = hits_buffer[plane_id, i_hit]
+        hits[hit_index].event_status = event_status
+#         hits[hit_index]['event_status'] = event_status
+        hit_index += 1
+    return hit_index
+
+
+def build_hits(raw_data):
     max_hits_per_event = 1000
-    # The order of the data is always START / FRAMW ID / FRAME LENGTH / DATA
-    debug = True
-    event_number = [0] * 8  # The event counter set by the software counting full events
+    # The order of the data is always START / FRAMEs ID / FRAME LENGTH / DATA
+    debug = False
+    event_number = [-1] * 8  # The event counter set by the software counting full events
     frame_id = [0] * 8  # the counter value of the actual frame
+    last_frame_id = [-1] * 8  # the counter value of the last frame
     frame_length = [-1] * 6  # the number of data words in the actual frame
     word_index = [-1] * 6  # the word index of per device of the actual frame
     n_words = [0] * 6  # The number of words containing column / row info
     row = [-1] * 6  # the actual readout row (rolling shutter)
 
+    event_status = np.zeros(shape=(6, ), dtype=np.uint16)
+    trigger_number = -1
+
     hits = np.zeros(shape=(raw_data.shape[0]), dtype=hit_dtype)
     hit_index = 0
 
-#     hits_buffer = np.zeros((6, max_hits_per_event), dtype=hit_dtype)
-#     hit_buffer_index = [0] * 6
+    hits_buffer = np.zeros((6, max_hits_per_event), dtype=hit_dtype)  # Needed since raw data is analyzed in chunks
+    hit_buffer_index = [0] * 6
 
     for raw_i in range(raw_data.shape[0]):
         word = raw_data[raw_i]
@@ -205,7 +258,15 @@ def m26_decode(raw_data):
             plane_id = actual_plane - 1  # The actual_plane if the actual word belongs to (0 .. 5)
 
             # Interpret the word of the actual plane
-            if is_frame_header_high(word):  # New event
+            if is_frame_header_high(word):  # New event; events are aligned at this header
+                if trigger_number < 0:
+                    add_event_status(plane_id, event_status, NO_TRG_WORD)
+                if last_frame_id[plane_id] > 0 and frame_id[plane_id] != last_frame_id[plane_id] + 1:
+                    add_event_status(plane_id, event_status, DATA_ERROR)
+                last_frame_id[plane_id] = frame_id[plane_id]
+                hit_index = finish_event(plane_id, hits_buffer, hit_buffer_index[plane_id], event_status[plane_id], hits, hit_index)  # Finish old event
+                hit_buffer_index[plane_id] = 0
+                event_number[plane_id] += 1  # Increase event counter for this plane
                 if debug:
                     print "start %d" % plane_id
                 word_index[plane_id] = 0
@@ -217,7 +278,7 @@ def m26_decode(raw_data):
                     if debug:
                         print "header"
                     if not is_frame_header_low(word, actual_plane):
-                        print "header ERROR", hex(word)
+                        add_event_status(plane_id, event_status, DATA_ERROR)
                 elif word_index[plane_id] == 2:  # 2. word should have the frame ID high word
                     if debug:
                         print "frame lsb"
@@ -225,54 +286,113 @@ def m26_decode(raw_data):
                 elif word_index[plane_id] == 3:  # 3. word should have the frame ID low word
                     frame_id[actual_plane] = get_frame_id_low(word) | frame_id[actual_plane]
                     if plane_id == 0:
-                        frame_id[0] = frame_id[plane_id]
+                        frame_id[0] = frame_id[actual_plane]
                 elif word_index[plane_id] == 4:  # 4. word should have the frame length high word
                     frame_length[plane_id] = get_frame_length(word)
                 elif word_index[plane_id] == 5:  # 5. word should have the frame length low word (=high word, one data line, the number of words is repeated 2 times)
                     if frame_length[plane_id] != get_frame_length(word):
-                        print "frame_length ERROR", hex(word)
+                        add_event_status(plane_id, event_status, EVENT_INCOMPLETE)
                 elif word_index[plane_id] == 6 + frame_length[plane_id]:  # Second last word is frame tailer high word
-                    if is_frame_tailer_high(word):
-                        print "tailer ERROR", hex(word)
+                    if not is_frame_tailer_high(word):
+                        add_event_status(plane_id, event_status, DATA_ERROR)
                 elif word_index[plane_id] == 7 + frame_length[plane_id]:  # First last word is frame tailer low word
                     frame_length[plane_id] = -1
                     n_words[plane_id] = 0
-                    if is_frame_tailer_low(word, actual_plane):
-                        print "tailer ERROR", hex(word)
-                    event_number[plane_id] += 1
+                    if not is_frame_tailer_low(word, actual_plane):
+                        add_event_status(plane_id, event_status, DATA_ERROR)
                 else:  # Column / Row words
                     if n_words[plane_id] == 0:  # First word containing the row info and the number of data words for this row
                         if word_index[plane_id] == 6 + frame_length[plane_id] - 1:  # Always even amount of words or this fill word is used
-                            if debug:
-                                print "pass"
+                            add_event_status(plane_id, event_status, UNEVEN_EVENT)
                         else:
                             n_words[plane_id] = get_n_words(word)
                             row[plane_id] = get_row(word)
                             if debug:
                                 print "sts", n_words[plane_id], "row", row[plane_id]
-                            if word & 0x00008000 != 0:
-                                print "overflow", hex(word)
-                                break
+                            if has_overflow(word):
+                                add_event_status(plane_id, event_status, DATA_ERROR)
                     else:
                         n_words[plane_id] = n_words[plane_id] - 1  # Count down the words
                         n_hits = get_n_hits(word)
                         column = get_column(word)
                         for k in range(n_hits + 1):
-                            print (actual_plane, frame_id[plane_id], column + k, row[plane_id], 0)
-                            hits[hit_index] = (event_number[plane_id], plane_id, frame_id[plane_id], column + k, row[plane_id], 0, 0)
-                            hit_index += 1
-#                             dat[hit] = (plane, frame_id[plane], col + k, row[plane_id], 0)
-#                             hit = hit + 1
+                            if debug:
+                                print (event_number[plane_id], trigger_number, plane_id, frame_id[plane_id], column + k, row[plane_id], 0, 0)
+                            out_trigger_number = 0 if trigger_number < 0 else trigger_number  # Prevent storing negative number in unsigned int
+                            hits_buffer[plane_id, hit_buffer_index[plane_id]] = (event_number[plane_id], out_trigger_number, plane_id, frame_id[plane_id], column + k, row[plane_id], 0, 0)
+                            hit_buffer_index[plane_id] += 1
+        elif is_trigger_word(word):
+            trigger_number = get_trigger_number(word)
+
     return hits[:hit_index]
 
 
 
 class DataInterpreter(object):
 
-    def __init__(self, max_hits=100000):
-        self._max_hits = max_hits  # Maximum hits stored by the data interpreter
-        self._hits = np.zeros(self._max_hits, dtype=hit_dtype)
+    def __init__(self, raw_data_file, analyzed_data_file=None, create_pdf=True):
+        '''
+        Parameters
+        ----------
+        raw_data_file : string or tuple, list
+            A string with the raw data file name. File ending (.h5)
+        analyzed_data_file : string
+            The file name of the output analyzed data file. File ending (.h5)
+            Does not have to be set.
+        create_pdf : boolean
+            Creates interpretation plots into one PDF file.
+        '''
 
-    def interpret_raw_data(self, raw_data):
-        m26_decode_orig(raw_data, fout=r'C:\Users\DavidLP\git\pyBAR_mimosa26_interpreter\examples\test.txt')
-        print m26_decode(raw_data)
+        self._raw_data_file = raw_data_file
+
+        if analyzed_data_file:
+            if os.path.splitext(analyzed_data_file)[1].strip().lower() != ".h5":
+                self._analyzed_data_file = os.path.splitext(analyzed_data_file)[0] + ".h5"
+            else:
+                self._analyzed_data_file = analyzed_data_file
+        else:
+            self._analyzed_data_file = os.path.splitext(self._raw_data_file )[0] + '_interpreted.h5'
+
+        if create_pdf:
+            output_pdf_filename = os.path.splitext(self._raw_data_file )[0] + ".pdf"
+            logging.info('Opening output PDF file: %s', output_pdf_filename)
+            self.output_pdf = PdfPages(output_pdf_filename)
+
+        # Std. settings
+        self.chunk_size = 1000000
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        if self.output_pdf:
+            logging.info('Closing output PDF file: %s', str(self.output_pdf._file.fh.name))
+            self.output_pdf.close()
+
+    def interpret_word_table(self):
+        with tb.open_file(self._raw_data_file , 'r') as in_file_h5:
+            logging.info('Interpreting raw data file %s', self._raw_data_file)
+            with tb.open_file(self._analyzed_data_file, 'w') as out_file_h5:
+                description = np.zeros((1, ), dtype=hit_dtype).dtype
+                
+                hit_table = out_file_h5.create_table(out_file_h5.root, 
+                                                     name='Hits', 
+                                                     description=description, 
+                                                     title='hit_data', 
+                                                     filters=tb.Filters(complib='blosc', complevel=5, fletcher32=False), 
+                                                     chunkshape=(self.chunk_size / 100,))
+                
+                logging.info("Interpreting...")
+                progress_bar = progressbar.ProgressBar(widgets=['', progressbar.Percentage(), ' ', progressbar.Bar(marker='*', left='|', right='|'), ' ', progressbar.AdaptiveETA()], maxval=in_file_h5.root.raw_data.shape[0], term_width=80)
+                progress_bar.start()
+                
+                for word_index in range(0, in_file_h5.root.raw_data.shape[0], self.chunk_size):  # Loop over all words in the actual raw data file in chunks
+                    raw_data_chunk = in_file_h5.root.raw_data.read(word_index, word_index + self.chunk_size)
+                    hits = build_hits(raw_data_chunk)
+                    hit_table.append(hits)
+                    progress_bar.update(word_index)
+                    
+                progress_bar.finish()
+        
+        #m26_decode_orig(raw_data, fout=r'C:\Users\DavidLP\git\pyBAR_mimosa26_interpreter\examples\test.txt')
+#         print build_hits(raw_data)
