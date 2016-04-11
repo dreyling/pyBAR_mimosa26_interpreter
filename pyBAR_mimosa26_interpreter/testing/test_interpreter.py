@@ -11,15 +11,12 @@ from pyBAR_mimosa26_interpreter import data_interpreter
 def m26_decode_orig(raw, start=0, end=-1):  # Old quick and dirty Mimosa26 interpretation from Toko Hirono; used for comparison
     debug = 0
     n = 10000
-    idx = np.zeros(6)
     mframe = [0] * 8
     dlen = [-1] * 6
     idx = [-1] * 6
     numstatus = [0] * 6
     row = [-1] * 6
     dat = np.empty(n, dtype=[('plane', '<u2'), ('mframe', '<u4'), ('x', '<u2'), ('y', '<u2'), ('tlu', '<u2')])
-    with open("hit.npy", "wb") as f:
-        pass
     raw_i = start
     if end > 0:
         end = min(len(raw), end)
