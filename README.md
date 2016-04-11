@@ -1,24 +1,20 @@
 
 # pyBAR_mimosa26_interpreter [![Build Status](https://travis-ci.org/SiLab-Bonn/pyBAR_mimosa26_interpreter.svg?branch=master)](https://travis-ci.org/SiLab-Bonn/pyBAR_mimosa26_interpreter) [![Build Status](https://ci.appveyor.com/api/projects/status/github/SiLab-Bonn/pyBAR_mimosa26_interpreter?svg=true)](https://ci.appveyor.com/project/DavidLP/pyBAR_mimosa26_interpreter-71xwl)
 
-pyBAR_mimosa26_interpreter - A Mimosa 26 raw data interpreter in Python and C++
+pyBAR_mimosa26_interpreter - A Mimosa 26 raw data interpreter in Python.
 
-This package can be used to interpred raw data from the Mimosa 26 based telescope taken with the readout framework pyBAR. It also contains histogramming functions. The interpretation is just-in-time compiledto increase the speed.
+This package can be used to interpred raw data from the Mimosa 26 based telescope taken with the readout framework pyBAR. The interpretation is just-in-time compiledto increase the speed.
 
 ## Installation
 
 The following packages are required for pyBAR's Mimosa 26 interpreter:
   ```
-  numpy cython tables numba
+  numpy  tables numba
   ```
 
 ## Usage
 ```
-from pybar_mimosa26_interpreter.data_interpreter import PyDataInterpreter
-interpreter = PyDataInterpreter()  # Initialize interpretation module
-raw_data = np.array([73175087, 73044495, 73058863, 73194895, 73197919, 73093151], np.uint32)  # Some raw data to interpret
-interpreter.interpret_raw_data(raw_data)  ä Start the raw data interpretation
-print interpreter.get_hits()  # Print the hits in the raw data
+TBD
 ```
 
 Als take a look at the example folder.
