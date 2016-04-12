@@ -2,10 +2,14 @@
 '''
 
 import unittest
+import os
 import tables as tb
 import numpy as np
 
 from pyBAR_mimosa26_interpreter import data_interpreter
+
+testing_path = os.path.dirname(__file__)  # Get file path
+tests_data_folder = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(testing_path)) + r'/testing/'))  # Set test data path
 
 
 def m26_decode_orig(raw, start=0, end=-1):  # Old quick and dirty Mimosa26 interpretation from Toko Hirono; used for comparison
@@ -120,7 +124,7 @@ class TestInterpretation(unittest.TestCase):
         pass
 
     def test_interpretation_function(self):
-        with tb.open_file('example_data_1.h5', 'r') as in_file_h5:
+        with tb.open_file(tests_data_folder + r'/example_data_1.h5', 'r') as in_file_h5:
             raw_data = in_file_h5.root.raw_data[:]
 
             hits = data_interpreter.build_hits(raw_data)
