@@ -16,7 +16,7 @@ hit_dtype = np.dtype([('event_number', '<i8'), ('trigger_number', '<u4'), ('plan
 NO_ERROR = 0  # No error
 MULTIPLE_TRG_WORD = 1  # Event has more than one trigger word
 NO_TRG_WORD = 2  # Some hits of the event have no trigger word
-DATA_ERROR = 4  # Event has data word combinations that do not make sense (tailor at wrong position, not increasing frame counter ...)
+DATA_ERROR = 4  # Event has data word combinations that does not make sense (tailor at wrong position, not increasing frame counter ...)
 EVENT_INCOMPLETE = 8  # Data words are missing (e.g. tailor header)
 UNKNOWN_WORD = 16  # Event has unknown words
 UNEVEN_EVENT = 32  # Event has uneven amount of data words
@@ -349,15 +349,18 @@ class RawDataInterpreter(object):
                                 if self.debug:
                                     print((self.event_number[plane_id], self.trigger_number, plane_id, self.frame_id[plane_id], column + k, self.row[plane_id], 0, 0))
                                 out_trigger_number = 0 if self.trigger_number < 0 else self.trigger_number  # Prevent storing negative number in unsigned int
-                                self.hits_buffer[plane_id, self.hit_buffer_index[plane_id]] = (self.event_number[plane_id],
-                                                                                               out_trigger_number,
-                                                                                               plane_id,
-                                                                                               self.frame_id[plane_id],
-                                                                                               column + k,
-                                                                                               self.row[plane_id],
-                                                                                               0,
-                                                                                               0)
-                                self.hit_buffer_index[plane_id] += 1
+                                if self.hit_buffer_index[plane_id] < self.max_hits_per_event:
+                                    self.hits_buffer[plane_id, self.hit_buffer_index[plane_id]] = (self.event_number[plane_id],
+                                                                                                   out_trigger_number,
+                                                                                                   plane_id,
+                                                                                                   self.frame_id[plane_id],
+                                                                                                   column + k,
+                                                                                                   self.row[plane_id],
+                                                                                                   0,
+                                                                                                   0)
+                                    self.hit_buffer_index[plane_id] += 1
+                                else:
+                                    add_event_status(plane_id, self.event_status, TRUNC_EVENT)
             elif is_trigger_word(word):
                 self.trigger_number = get_trigger_number(word)
 
