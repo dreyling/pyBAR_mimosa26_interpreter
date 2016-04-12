@@ -2,3 +2,4 @@ numba
 numpy
 tables
 progressbar
+matplotlib
