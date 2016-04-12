@@ -20,6 +20,7 @@ install:
   - export PATH="$HOME/miniconda/bin:$PATH"
   - conda install --yes numpy pytables numba future nose docutils
   - conda info -a
+  - pip install progressbar-latest
   - pip install -r requirements.txt
   - python setup.py develop
 
