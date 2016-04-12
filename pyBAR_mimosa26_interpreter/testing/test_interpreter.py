@@ -7,6 +7,7 @@ import tables as tb
 import numpy as np
 
 from pyBAR_mimosa26_interpreter import data_interpreter
+from pyBAR_mimosa26_interpreter.testing.tools import test_tools
 
 testing_path = os.path.dirname(__file__)  # Get file path
 tests_data_folder = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(testing_path)) + r'/testing/'))  # Set test data path
@@ -123,11 +124,16 @@ class TestInterpretation(unittest.TestCase):
     def setUpClass(cls):
         pass
 
+    @classmethod
+    def tearDownClass(self):  # Remove created files
+        os.remove(tests_data_folder + r'/example_data_1_interpreted.h5')
+
     def test_interpretation_function(self):
         with tb.open_file(tests_data_folder + r'/example_data_1.h5', 'r') as in_file_h5:
             raw_data = in_file_h5.root.raw_data[:]
 
-            hits = data_interpreter.build_hits(raw_data)
+            raw_data_interpreter = data_interpreter.RawDataInterpreter()
+            hits = raw_data_interpreter.build_hits(raw_data)
             hits_old = m26_decode_orig(raw_data)
 
             # Check interpretation
@@ -144,6 +150,19 @@ class TestInterpretation(unittest.TestCase):
                 old = hits_old[np.where(hits_old['plane'] == plane)]['mframe'][:new.shape[0]]
                 np.testing.assert_array_equal(old, new, err_msg='plane %d' % (plane - 1))
 
+    def test_interpretation(self):
+        with data_interpreter.DataInterpreter(raw_data_file='example_data_1.h5') as raw_data_analysis:
+            raw_data_analysis.interpret_word_table()
+
+        checks_passed, error_msg = test_tools.compare_h5_files('example_data_1_interpreted.h5', 'example_data_1_result.h5')
+        self.assertTrue(checks_passed, error_msg)
+
+        # Force chunked analysis, has to give same result
+        with data_interpreter.DataInterpreter(raw_data_file='example_data_1.h5', chunk_size=2999) as raw_data_analysis:
+            raw_data_analysis.interpret_word_table()
+
+        checks_passed, error_msg = test_tools.compare_h5_files('example_data_1_interpreted.h5', 'example_data_1_result.h5')
+        self.assertTrue(checks_passed, error_msg)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestInterpretation)
