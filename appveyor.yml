@@ -17,6 +17,7 @@ install:
   # Miniconda setup + necessary external packages
   - set PATH=C:\Miniconda;C:\Miniconda\Scripts;%PATH%  # miniconda is already installed on appveyor: https://github.com/appveyor/ci/issues/359
   - conda install --yes cython mock nose numpy pytables
+  - pip install https://github.com/SiLab-Bonn/silab_utils/archive/master.zip
   - pip install -r requirements.txt
   - python.exe setup.py develop
 
