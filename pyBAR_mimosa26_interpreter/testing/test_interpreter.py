@@ -133,7 +133,7 @@ class TestInterpretation(unittest.TestCase):
             raw_data = in_file_h5.root.raw_data[:]
 
             raw_data_interpreter = data_interpreter.RawDataInterpreter()
-            hits = raw_data_interpreter.build_hits(raw_data)
+            hits = raw_data_interpreter.interpret_raw_data(raw_data)
             hits_old = m26_decode_orig(raw_data)
 
             # Check interpretation
@@ -151,17 +151,17 @@ class TestInterpretation(unittest.TestCase):
                 np.testing.assert_array_equal(old, new, err_msg='plane %d' % (plane - 1))
 
     def test_interpretation(self):
-        with data_interpreter.DataInterpreter(raw_data_file='example_data_1.h5') as raw_data_analysis:
+        with data_interpreter.DataInterpreter(raw_data_file=tests_data_folder + r'/example_data_1.h5') as raw_data_analysis:
             raw_data_analysis.interpret_word_table()
 
-        checks_passed, error_msg = test_tools.compare_h5_files('example_data_1_interpreted.h5', 'example_data_1_result.h5')
+        checks_passed, error_msg = test_tools.compare_h5_files(tests_data_folder + r'/example_data_1_interpreted.h5', tests_data_folder + r'/example_data_1_result.h5')
         self.assertTrue(checks_passed, error_msg)
 
         # Force chunked analysis, has to give same result
-        with data_interpreter.DataInterpreter(raw_data_file='example_data_1.h5', chunk_size=2999) as raw_data_analysis:
+        with data_interpreter.DataInterpreter(raw_data_file=tests_data_folder + r'/example_data_1.h5', chunk_size=2999) as raw_data_analysis:
             raw_data_analysis.interpret_word_table()
 
-        checks_passed, error_msg = test_tools.compare_h5_files('example_data_1_interpreted.h5', 'example_data_1_result.h5')
+        checks_passed, error_msg = test_tools.compare_h5_files(tests_data_folder + r'/example_data_1_interpreted.h5', tests_data_folder + r'/example_data_1_result.h5')
         self.assertTrue(checks_passed, error_msg)
 
 if __name__ == '__main__':
