@@ -3,3 +3,4 @@ numpy
 tables
 progressbar
 matplotlib
+silab_utils  # For fast analysis functions
