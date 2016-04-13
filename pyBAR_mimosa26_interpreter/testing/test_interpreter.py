@@ -7,6 +7,7 @@ import tables as tb
 import numpy as np
 
 from pyBAR_mimosa26_interpreter import data_interpreter
+from pyBAR_mimosa26_interpreter import raw_data_interpreter
 from pyBAR_mimosa26_interpreter.testing.tools import test_tools
 
 testing_path = os.path.dirname(__file__)  # Get file path
@@ -127,17 +128,18 @@ class TestInterpretation(unittest.TestCase):
     @classmethod
     def tearDownClass(self):  # Remove created files
         os.remove(tests_data_folder + r'/example_data_1_interpreted.h5')
+        os.remove(tests_data_folder + r'/example_data_1.pdf')
 
-    def test_interpretation_function(self):
+    def test_raw_data_interpretation(self):
         with tb.open_file(tests_data_folder + r'/example_data_1.h5', 'r') as in_file_h5:
             raw_data = in_file_h5.root.raw_data[:]
 
-            raw_data_interpreter = data_interpreter.RawDataInterpreter()
-            hits = raw_data_interpreter.interpret_raw_data(raw_data)
+            interpreter = raw_data_interpreter.RawDataInterpreter()
+            hits = interpreter.interpret_raw_data(raw_data)
             hits_old = m26_decode_orig(raw_data)
 
             # Check interpretation
-            for plane in range(1, 7):  # Hits are sorted differently per plane, thus loop is needed
+            for plane in range(1, 7):  # Hits are sorted differently per plane, thus loop and selection is needed
                 new = hits[hits['plane'] + 1 == plane]['column']
                 old = hits_old[np.where(hits_old['plane'] == plane)]['x'][:new.shape[0]]
                 np.testing.assert_array_equal(old, new, err_msg='plane %d' % (plane - 1))
@@ -151,15 +153,17 @@ class TestInterpretation(unittest.TestCase):
                 np.testing.assert_array_equal(old, new, err_msg='plane %d' % (plane - 1))
 
     def test_interpretation(self):
-        with data_interpreter.DataInterpreter(raw_data_file=tests_data_folder + r'/example_data_1.h5') as raw_data_analysis:
-            raw_data_analysis.interpret_word_table()
+        with data_interpreter.DataInterpreter(raw_data_file=tests_data_folder + r'/example_data_1.h5') as interpreter:
+            interpreter.create_hit_table = True
+            interpreter.interpret_word_table()
 
         checks_passed, error_msg = test_tools.compare_h5_files(tests_data_folder + r'/example_data_1_interpreted.h5', tests_data_folder + r'/example_data_1_result.h5')
         self.assertTrue(checks_passed, error_msg)
 
         # Force chunked analysis, has to give same result
-        with data_interpreter.DataInterpreter(raw_data_file=tests_data_folder + r'/example_data_1.h5', chunk_size=2999) as raw_data_analysis:
-            raw_data_analysis.interpret_word_table()
+        with data_interpreter.DataInterpreter(raw_data_file=tests_data_folder + r'/example_data_1.h5', chunk_size=2999) as interpreter:
+            interpreter.create_hit_table = True
+            interpreter.interpret_word_table()
 
         checks_passed, error_msg = test_tools.compare_h5_files(tests_data_folder + r'/example_data_1_interpreted.h5', tests_data_folder + r'/example_data_1_result.h5')
         self.assertTrue(checks_passed, error_msg)
