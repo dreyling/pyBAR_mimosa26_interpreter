@@ -1,8 +1,9 @@
 ''' Script to check the correctness of the interpretation.
 '''
 
-import unittest
 import os
+#os.environ['NUMBA_DISABLE_JIT'] = '1'  # Enable for debugging
+import unittest
 import tables as tb
 import numpy as np
 
@@ -154,6 +155,14 @@ class TestInterpretation(unittest.TestCase):
 
     def test_interpretation(self):
         with data_interpreter.DataInterpreter(raw_data_file=tests_data_folder + r'/example_data_1.h5') as interpreter:
+            interpreter.create_hit_table = True
+            interpreter.interpret_word_table()
+
+        checks_passed, error_msg = test_tools.compare_h5_files(tests_data_folder + r'/example_data_1_interpreted.h5', tests_data_folder + r'/example_data_1_result.h5')
+        self.assertTrue(checks_passed, error_msg)
+
+        # Force chunked analysis, has to give same result
+        with data_interpreter.DataInterpreter(raw_data_file=tests_data_folder + r'/example_data_1.h5', chunk_size=100) as interpreter:
             interpreter.create_hit_table = True
             interpreter.interpret_word_table()
 
