@@ -233,8 +233,10 @@ def add_event_status(plane_id, event_status, status_code):
 def finish_event(plane_id, hits_buffer, hit_buffer_index, event_status, hits, hit_index):  # Append buffered hits to hit object
     for i_hit in range(hit_buffer_index):  # Loop over buffered hits
         hits[hit_index] = hits_buffer[plane_id, i_hit]
-        hits[hit_index].event_status = event_status
+        hits[hit_index]['event_status'] = event_status
         hit_index += 1
+        if hit_index > hits.shape[0] - 1:
+            raise RuntimeError('Hits array is too small for the hits. Tell developer!')
     return hit_index  # Return actual hit index; needed to append correctly at next call of finish_event
 
 
@@ -280,7 +282,7 @@ def build_hits(raw_data, frame_id, last_frame_id, frame_length, word_index, n_wo
     # The raw data order of the Mimosa 26 data should be always START / FRAMEs ID / FRAME LENGTH / DATA
     # Since the clock is the same for each plane; the order is START plane 1, START plane 2, ...
 
-    hits = np.zeros(shape=(raw_data.shape[0]), dtype=hit_dtype)  # Result hits array
+    hits = np.zeros(shape=(raw_data.shape[0] * 5), dtype=hit_dtype)  # Result hits array
     hit_index = 0  # Pointer to actual hit in resul hit arrray; needed to append hits every event
 
     for raw_i in range(raw_data.shape[0]):
