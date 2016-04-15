@@ -33,6 +33,9 @@ class DataInterpreter(object):
             interpretation for larger numbers. RAM needed is approximately 10 * chunk_size in bytes.
         '''
 
+        if chunk_size < 100:
+            raise RuntimeError('Please chose reeasonable large chunk size')
+
         self._raw_data_file = raw_data_file
 
         if analyzed_data_file:
