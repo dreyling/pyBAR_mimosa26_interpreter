@@ -290,8 +290,7 @@ def build_hits(raw_data, frame_id, last_frame_id, frame_length, word_index, n_wo
         if is_mimosa_data(word):  # There can be not mimosa related data words (from FE-I4)
 
             # Check to which plane the data belongs
-            actual_plane = get_plane_number(word)
-            plane_id = actual_plane - 1  # The actual_plane if the actual word belongs to (0 .. 5)
+            plane_id = get_plane_number(word) - 1  # The actual_plane if the actual word belongs to (0 .. 5)
 
             # Interpret the word of the actual plane
             if is_frame_header_high(word):  # New event for actual plane; events are aligned at this header
@@ -310,14 +309,14 @@ def build_hits(raw_data, frame_id, last_frame_id, frame_length, word_index, n_wo
             else:
                 word_index[plane_id] += 1
                 if word_index[plane_id] == 1:  # 1. word should have the header low word
-                    if not is_frame_header_low(word, actual_plane):
+                    if not is_frame_header_low(word, plane=plane_id + 1):
                         add_event_status(plane_id, event_status, DATA_ERROR)
                 elif word_index[plane_id] == 2:  # 2. word should have the frame ID high word
-                    frame_id[plane_id + 1] = get_frame_id_high(word)
+                    frame_id[plane_id] = get_frame_id_high(word)
                 elif word_index[plane_id] == 3:  # 3. word should have the frame ID low word
-                    frame_id[actual_plane] = get_frame_id_low(word) | frame_id[actual_plane]
+                    frame_id[plane_id] = get_frame_id_low(word) | frame_id[plane_id]
                     if plane_id == 0:
-                        frame_id[0] = frame_id[actual_plane]
+                        frame_id[0] = frame_id[plane_id]
                 elif word_index[plane_id] == 4:  # 4. word should have the frame length high word
                     frame_length[plane_id] = get_frame_length(word)
                 elif word_index[plane_id] == 5:  # 5. word should have the frame length low word (=high word, one data line, the number of words is repeated 2 times)
@@ -329,7 +328,7 @@ def build_hits(raw_data, frame_id, last_frame_id, frame_length, word_index, n_wo
                 elif word_index[plane_id] == 7 + frame_length[plane_id]:  # First last word is frame tailer low word
                     frame_length[plane_id] = -1
                     n_words[plane_id] = 0
-                    if not is_frame_tailer_low(word, actual_plane):
+                    if not is_frame_tailer_low(word, plane=plane_id + 1):
                         add_event_status(plane_id, event_status, DATA_ERROR)
                 else:  # Column / Row words
                     if n_words[plane_id] == 0:  # First word containing the row info and the number of data words for this row
@@ -374,18 +373,18 @@ class RawDataInterpreter(object):
 
     def reset(self):  # Reset variables
         # Per frame variables
-        self.frame_id = [0] * 8  # The counter value of the actual frame
-        self.last_frame_id = [-1] * 8  # The counter value of the last frame
-        self.frame_length = [-1] * 6  # The number of data words in the actual frame
-        self.word_index = [-1] * 6  # The word index per device of the actual frame
-        self.n_words = [0] * 6  # The number of words containing column / row info
-        self.row = [-1] * 6  # the actual readout row (rolling shutter)
+        self.frame_id = np.zeros(6, np.int32)  # The counter value of the actual frame
+        self.last_frame_id = np.ones(6, np.int32) * -1  # The counter value of the last frame
+        self.frame_length = np.ones(6, np.int32) * -1  # The number of data words in the actual frame
+        self.word_index = np.ones(6, np.int32) * -1  # The word index per device of the actual frame
+        self.n_words = np.zeros(6, np.uint32)  # The number of words containing column / row info
+        self.row = np.ones(6, np.int32) * -1  # the actual readout row (rolling shutter)
 
         # Per event variables
         self.hits_buffer = np.zeros((6, self.max_hits_per_event), dtype=hit_dtype)  # Buffers actual event hits, needed since raw data is analyzed in chunks
-        self.hit_buffer_index = [0] * 6  # Hit buffer index for each plane; needed to append hits
+        self.hit_buffer_index = np.zeros(6, np.uint32)  # Hit buffer index for each plane; needed to append hits
         self.event_status = np.zeros(shape=(6, ), dtype=np.uint16)  # Actual event status for each plane
-        self.event_number = [-1] * 8  # The event counter set by the software counting full events for each plane
+        self.event_number = np.ones(6, np.int64) * -1  # The event counter set by the software counting full events for each plane
         self.trigger_number = -1  # The actual event trigger number
 
     def interpret_raw_data(self, raw_data):
