@@ -132,6 +132,7 @@ class TestInterpretation(unittest.TestCase):
         os.remove(tests_data_folder + r'/example_data_1.pdf')
 
     def test_raw_data_interpretation(self):
+        # Test 1: Interpret raw data from file and compare with old interpreation
         with tb.open_file(tests_data_folder + r'/example_data_1.h5', 'r') as in_file_h5:
             raw_data = in_file_h5.root.raw_data[:]
 
@@ -153,6 +154,10 @@ class TestInterpretation(unittest.TestCase):
                 old = hits_old[np.where(hits_old['plane'] == plane)]['mframe'][:new.shape[0]]
                 np.testing.assert_array_equal(old, new, err_msg='plane %d' % (plane - 1))
 
+        # Test 2: Check behavior for empty raw data
+        raw_data = np.empty((1,))
+        hits = interpreter.interpret_raw_data(raw_data[0:0])
+    #@unittest.SkipTest
     def test_interpretation(self):
         with data_interpreter.DataInterpreter(raw_data_file=tests_data_folder + r'/example_data_1.h5') as interpreter:
             interpreter.create_hit_table = True
