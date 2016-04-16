@@ -5,13 +5,19 @@ import numpy as np
 import tables as tb
 import logging
 import progressbar
+from numba import njit
 from matplotlib.backends.backend_pdf import PdfPages
-from silab_utils import analysis_utils
 
 from pyBAR_mimosa26_interpreter import raw_data_interpreter
 from pyBAR_mimosa26_interpreter import plotting
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - [%(levelname)-8s] (%(threadName)-10s) %(message)s")
+
+
+@njit
+def fill_occupanc_hist(hist, hits):
+    for hit_index in range(hits.shape[0]):
+        hist[hits[hit_index]['plane']][hits[hit_index]['column'], hits[hit_index]['row']] += 1
 
 
 class DataInterpreter(object):
@@ -127,9 +133,7 @@ class DataInterpreter(object):
                         hit_table.append(hits)
 
                     if self.create_occupancy_hist:
-                        for plane in range(6):  # Loop over Mimosa planes
-                            actual_plane_hits = hits[hits['plane'] == plane]
-                            self.occupancy_arrays[plane] += analysis_utils.hist_2d_index(actual_plane_hits['column'], actual_plane_hits['row'], shape=(1152, 576))
+                        fill_occupanc_hist(self.occupancy_arrays, hits)
 
                     progress_bar.update(word_index)
                 progress_bar.finish()

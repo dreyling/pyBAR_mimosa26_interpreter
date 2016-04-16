@@ -20,7 +20,6 @@ install:
   - export PATH="$HOME/miniconda/bin:$PATH"
   - conda install --yes numpy pytables numba cython future nose docutils matplotlib
   - conda info -a
-  - pip install https://github.com/SiLab-Bonn/silab_utils/archive/master.zip
   - pip install -r requirements.txt
   - python setup.py develop
 
