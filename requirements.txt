@@ -1,5 +1,5 @@
 numba
 numpy
 tables
-progressbar
+progressbar-latest
 matplotlib
