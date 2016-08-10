@@ -47,19 +47,16 @@ def _m26_converter(raw_data, plane, hits, mframe, dlen, idx, numstatus, row,ovf,
                     if dlen!=(raw_d & 0x0000FFFF) * 2:
                         return hit_i,raw_i,3, mframe, dlen, idx, numstatus, row,ovf,\
                                tlu_buf,tlu_buf_i,hit_buf,hit_buf_i,event_number,debug
- ##MIMOSA_DLEN_ERROR
                 elif idx == 6 + dlen:
                     if raw_d & 0xFFFF != 0xaa50: 
                         return hit_i,raw_i,4, mframe, dlen, idx, numstatus, row,ovf,\
                                tlu_buf,tlu_buf_i,hit_buf,hit_buf_i,event_number,debug
- ##MIMOSA_TAILER_ERROR
                 elif idx == 7 + dlen:  # Last word is frame tailer low word
                     dlen = -1
                     numstatus = 0
                     if raw_d & 0xFFFF != (0xaa50 | plane): 
                         return hit_i,raw_i,5,mframe, dlen, idx, numstatus, row,ovf,\
                                tlu_buf,tlu_buf_i,hit_buf,hit_buf_i,event_number,debug
-  ##MIMOSA_TAILER2_ERROR
                     ######## copy to hits
                     jj=0
                     for j in range(tlu_buf_i):
@@ -118,6 +115,7 @@ def _m26_converter(raw_data, plane, hits, mframe, dlen, idx, numstatus, row,ovf,
                             return hit_i,raw_i,2, mframe, dlen, idx, numstatus, row,ovf,\
                                    tlu_buf,tlu_buf_i,hit_buf,hit_buf_i,event_number,debug
  ##MIMOSA_COL_ERROR
+
                         for k in range(num + 1):
                             hit_buf[hit_buf_i]['frame'] = mframe
                             hit_buf[hit_buf_i]['x'] = col + k
@@ -210,7 +208,7 @@ def m26_converter(fin,fout,plane):
                 start=start+raw_i+1
                 if start>=end:
                     break
-aligned_dtype = np.dtype([('event_number', '<i8'), ('frame','u2'),
+aligned_dtype = np.dtype([('event_number', '<i8'), ('frame','u1'),
                       ('column', '<u2'), ('row', '<u2'),('charge', '<u2')])
 @njit
 def _align_event_number(fe_hits,m26_hits,hits,tr,debug):
