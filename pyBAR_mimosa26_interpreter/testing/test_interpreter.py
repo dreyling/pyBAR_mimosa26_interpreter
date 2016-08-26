@@ -157,7 +157,7 @@ class TestInterpretation(unittest.TestCase):
         # Test 2: Check behavior for empty raw data
         raw_data = np.empty((1,))
         hits = interpreter.interpret_raw_data(raw_data[0:0])
-    #@unittest.SkipTest
+
     def test_interpretation(self):
         with data_interpreter.DataInterpreter(raw_data_file=tests_data_folder + r'/example_data_1.h5') as interpreter:
             interpreter.create_hit_table = True
